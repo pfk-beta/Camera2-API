@@ -24,7 +24,7 @@ github_username:  pfk-beta
 
 # Build settings
 markdown: kramdown
-theme: jekyll-theme-leap-day
+theme: jekyll-theme-hacker
 plugins:
   - jekyll-feed
 
