@@ -4,5 +4,3 @@
 
 layout: home
 ---
-
-# Camera2 API - tutorial
