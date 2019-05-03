@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Camera2 API | First steps</title>
+        <link rel="stylesheet"
+              href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+              integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T"
+              crossorigin="anonymous">
+    </head>
+    <body>
+
+        <div class="container">
+            <h2>Before coding</h2>
+            <p>To understand Camera2 API take a fast look into
+                <a href="https://github.com/googlesamples/android-Camera2Raw/">sample repo</a> and <a href="https://developer.android.com/reference/android/hardware/camera2/package-summary">official documentation</a>
+            </p>
+
+            <h2>Setup empty project</h2>
+            <p>First of all create empty project in Android Studio, like on <a href="https://developer.android.com/studio/projects/create-project/">tutorial</a></p>
+            <ol>
+                <li>Choose "Start a new Android Studio project".</li>
+                <li>Select "Empty Activity" and "Next" button.</li>
+                <li>Fill "Configuration" window - Name, Package name, Save location and Language. If you are not familiar with Kotlin choose Java. This tutorial will be written in Java.</li>
+                <li>Google for minimum api level for Camera2 API - 21. For now I will choose 27.</li>
+                <li>Button "Finish".</li>
+            </ol>
+
+            <h2>We do not waste time</h2>
+            <p>So let's create instrumented tests for running tests on android device, according to <a href="https://developer.android.com/training/testing/unit-testing/instrumented-unit-tests">documentation</a>. Why? Because good programmer write tests. For testing hid own code, for testing other's code. Running tests on android device is wonderful solution. According to tutorial we have to do:</p>
+            <ol>
+
+                <li>
+                    <ul>
+                        <li>
+                            <strong>a) </strong>In some Android Studio versions instrumented tests are already ready to run. You should check whether you have folder <code>app/src/androidTest/java</code> - if yes you have already configured instrumented tests.
+                        </li>
+                        <li>
+                            <strong>b) </strong>If you do not have these folders - create it. Inside it, create another folders similar to your application's package structure. e.g. <code>com.example.myapplication</code>.
+                        </li>
+                    </ul>
+                </li>
+
+                <li>
+                    In you app's <code>build.gradle</code> you should have in dependencies <code>test:runner</code> and <code>test:rules</code> as follows (versions may differs, if these packages are from <code>com.android.support.test</code> change it to <code>androidx.text</code>):
+                    <pre>
+                    dependencies {
+                        androidTestImplementation 'androidx.test:runner:1.1.0'
+                        androidTestImplementation 'androidx.test:rules:1.1.0'
+                    }
+                    </pre>
+                </li>
+
+                <li>
+                    Ensure that you have setup <code>testInstrumentationRunner</code> in <code>build.gradle</code> as follows:
+                    <pre>
+                    android {
+                        ...
+                        defaultConfig {
+                            ...
+                            testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+                        }
+                    }            
+                    </pre>
+                </li>
+
+                <li>If you want to order execution of tests or group your tests, create and use test suite described in documentation.</li>
+            </ol>
+
+            <h2>What Tiggers do best</h2>
+            <p>First of all we would like to just "open camera" using <a href="https://developer.android.com/reference/android/hardware/camera2/CameraManager.html#openCamera(java.lang.String,%2520android.hardware.camera2.CameraDevice.StateCallback,%2520android.os.Handler)">method</a>:</p>
+            <ol>
+                <li>
+                    <p>so we need cameraId (obtained from <code>CameraManager</code>),</p>
+                    <pre>
+                    // get context (remember to use getTargetContext())
+                    Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+                    // get camera manager
+                    CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+                    // iterate over all device's cameras
+                    String cameraId = null;
+                    for (String camId : manager.getCameraIdList()) {
+                        // and choose apropriete one, based on camera characteristics
+                        CameraCharacteristics characteristics = manager.getCameraCharacteristics(camId);
+                        
+                        Integer LENS_FACING = characteristics.get(CameraCharacteristics.LENS_FACING);
+                        if (LENS_FACING != null && LENS_FACING == CameraCharacteristics.LENS_FACING_BACK) {
+                            cameraId = camId;
+                            break;
+                        }
+                    }
+                    </pre>
+                </li>
+                <li>
+                    <p><code>CameraDevice.StateCallback</code> object (which we will create),</p>
+                    <p>(to avoid problems, define these elements inside test class, not inside of test method)</p>
+                    <pre>
+                    // create variable for holding device
+                    private CameraDevice cameraDevice;
+
+                    // create state object, to pass to open method. Implements required methods
+                    private CameraDevice.StateCallback mStateCallback = new CameraDevice.StateCallback() {
+                        @Override
+                        public void onOpened(@NonNull CameraDevice camera) {
+                            // this method is most important for us. Assign opened device to our variable defined above
+                            cameraDevice = camera;
+                        }
+
+                        @Override
+                        public void onDisconnected(@NonNull CameraDevice camera) {
+                            camera.close();
+                        }
+
+                        @Override
+                        public void onError(@NonNull CameraDevice camera, int error) {
+                            camera.close();
+                        }
+                    };
+                    </pre>
+                </li>
+                <li>
+                    <p>and <code>Handler</code> object.</p>
+                    <pre>
+                    HandlerThread mBackgroundThread = new HandlerThread("CameraThread");
+                    mBackgroundThread.start();
+                    Handler backgroundHandler = new Handler(mBackgroundThread.getLooper());
+                    </pre>
+                </li>
+                <li>
+                    <p>Open camera</p>
+                    <pre>manager.openCamera(cameraId, mStateCallback, backgroundHandler);</pre>
+                </li>
+                <li><p>At the end run test class</p></li>
+            </ol>
+
+            <h2>Troubleshooting</h2>
+            <ul>
+                <li>Add <code>&lt;uses-permission android:name="android.permission.CAMERA" /&gt;</code> into <code>AndroidManifest.xml</code></li>
+                <li>
+                    <p>If you got error <code>Lacking privileges to access camera service</code>, google for it! and add</p>
+                    <pre>
+                    @Rule
+                    public GrantPermissionRule permissionRule = GrantPermissionRule.grant(Manifest.permission.&lt;PROPER_PREMISSION&gt;);
+                    </pre>
+                </li>
+                <li>
+                    <p>If you got error <code>No instrumentation registered! Must run under a registering instrumentation</code>, google for it! and change <code>android.support</code> to <code>androidx</code> packages. According to documentation. At the end, if no method helps, remove <code>Run configuration</code> from Android Studio, and create new one for invoking tests.</p>
+                </li>
+                <li>
+                    <p>Test can be run on VirtualMachine as well</p>
+                </li>
+            </ul>
+
+            <h2>TL;DR</h2>
+            <pre>
+            package com.example.myapplication;
+
+
+            import android.Manifest;
+            import android.content.Context;
+            import android.hardware.camera2.CameraAccessException;
+            import android.hardware.camera2.CameraCharacteristics;
+            import android.hardware.camera2.CameraDevice;
+            import android.hardware.camera2.CameraManager;
+            import android.os.Handler;
+            import android.os.HandlerThread;
+            import android.util.Log;
+
+            import androidx.annotation.NonNull;
+            import androidx.test.InstrumentationRegistry;
+            import androidx.test.filters.SmallTest;
+            import androidx.test.rule.GrantPermissionRule;
+            import androidx.test.runner.AndroidJUnit4;
+
+            import org.junit.Rule;
+            import org.junit.Test;
+            import org.junit.runner.RunWith;
+
+            @RunWith(AndroidJUnit4.class)
+            @SmallTest
+            public class ExampleInstrumentedTest {
+
+
+                @Rule
+                public GrantPermissionRule permissionRule = GrantPermissionRule.grant(Manifest.permission.CAMERA);
+
+                // create variable for holding device
+                private CameraDevice cameraDevice;
+
+                // create state object, to pass to open method. Implements required methods
+                private CameraDevice.StateCallback mStateCallback = new CameraDevice.StateCallback() {
+                    @Override
+                    public void onOpened(@NonNull CameraDevice camera) {
+                        // this method is most important for us. Assign opened device to our variable defined above
+                        cameraDevice = camera;
+                        Log.d("ExampleInstrumentedTest", "CameraDevice.StateCallback::onOpened");
+                    }
+
+                    @Override
+                    public void onDisconnected(@NonNull CameraDevice camera) {
+                        camera.close();
+                    }
+
+                    @Override
+                    public void onError(@NonNull CameraDevice camera, int error) {
+                        camera.close();
+                    }
+                };
+
+
+                @Test
+                public void test1() throws CameraAccessException {
+                    // get context (remember to use getTargetContext())
+                    Context context = InstrumentationRegistry.getTargetContext();
+                    // get camera manager
+                    CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+                    // iterate over all device's cameras
+                    String cameraId = null;
+                    for (String camId : manager.getCameraIdList()) {
+                        // and choose apropriete one, based on camera characteristics
+                        CameraCharacteristics characteristics = manager.getCameraCharacteristics(camId);
+
+                        Integer LENS_FACING = characteristics.get(CameraCharacteristics.LENS_FACING);
+                        if (LENS_FACING != null && LENS_FACING == CameraCharacteristics.LENS_FACING_BACK) {
+                            cameraId = camId;
+                            break;
+                        }
+                    }
+
+                    HandlerThread mBackgroundThread = new HandlerThread("CameraThread");
+                    mBackgroundThread.start();
+                    Handler backgroundHandler = new Handler(mBackgroundThread.getLooper());
+
+                    if (cameraId != null) {
+                        manager.openCamera(cameraId, mStateCallback, backgroundHandler);
+                    }
+                }
+            }
+            </pre>
+            <p>In next post we will create CaptureSession and capture first photo.</p>
+        </div>
+
+    </body>
+</html>
