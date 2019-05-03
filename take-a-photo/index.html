@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Camera2 API | Take a photo</title>
+        <link rel="stylesheet"
+              href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+              integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T"
+              crossorigin="anonymous">
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-139551435-1"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'UA-139551435-1');
+    </script>
+    </head>
+    <body>
+        <div class="container">
+            <h2>the previous time</h2>
+            <p>In previous post we created test, which gets desired<code>cameraId</code>, then we opened <code>CameraDevice</code> for that <code>cameraId</code>. In brief we write this code:</p>
+            <pre>
+                package com.example.myapplication;
+
+
+                import android.Manifest;
+                import android.content.Context;
+                import android.hardware.camera2.CameraAccessException;
+                import android.hardware.camera2.CameraCharacteristics;
+                import android.hardware.camera2.CameraDevice;
+                import android.hardware.camera2.CameraManager;
+                import android.os.Handler;
+                import android.os.HandlerThread;
+                import android.util.Log;
+
+                import androidx.annotation.NonNull;
+                import androidx.test.InstrumentationRegistry;
+                import androidx.test.filters.SmallTest;
+                import androidx.test.rule.GrantPermissionRule;
+                import androidx.test.runner.AndroidJUnit4;
+
+                import org.junit.Rule;
+                import org.junit.Test;
+                import org.junit.runner.RunWith;
+
+                @RunWith(AndroidJUnit4.class)
+                @SmallTest
+                public class ExampleInstrumentedTest {
+
+
+                    @Rule
+                    public GrantPermissionRule permissionRule = GrantPermissionRule.grant(Manifest.permission.CAMERA);
+
+                    // create variable for holding device
+                    private CameraDevice cameraDevice;
+
+                    // create state object, to pass to open method. Implements required methods
+                    private CameraDevice.StateCallback mStateCallback = new CameraDevice.StateCallback() {
+                        @Override
+                        public void onOpened(@NonNull CameraDevice camera) {
+                            // this method is most important for us. Assign opened device to our variable defined above
+                            cameraDevice = camera;
+                            Log.d("ExampleInstrumentedTest", "CameraDevice.StateCallback::onOpened");
+                        }
+
+                        @Override
+                        public void onDisconnected(@NonNull CameraDevice camera) {
+                            camera.close();
+                        }
+
+                        @Override
+                        public void onError(@NonNull CameraDevice camera, int error) {
+                            camera.close();
+                        }
+                    };
+
+
+                    @Test
+                    public void test1() throws CameraAccessException {
+                        // get context (remember to use getTargetContext())
+                        Context context = InstrumentationRegistry.getTargetContext();
+                        // get camera manager
+                        CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+                        // iterate over all device's cameras
+                        String cameraId = null;
+                        for (String camId : manager.getCameraIdList()) {
+                            // and choose apropriete one, based on camera characteristics
+                            CameraCharacteristics characteristics = manager.getCameraCharacteristics(camId);
+
+                            Integer LENS_FACING = characteristics.get(CameraCharacteristics.LENS_FACING);
+                            if (LENS_FACING != null && LENS_FACING == CameraCharacteristics.LENS_FACING_BACK) {
+                                cameraId = camId;
+                                break;
+                            }
+                        }
+
+                        HandlerThread mBackgroundThread = new HandlerThread("CameraThread");
+                        mBackgroundThread.start();
+                        Handler backgroundHandler = new Handler(mBackgroundThread.getLooper());
+
+                        if (cameraId != null) {
+                            manager.openCamera(cameraId, mStateCallback, backgroundHandler);
+                        }
+                    }
+                }
+            </pre>
+
+
+            <p>To capture single photo we need:</p>
+            <ul>
+                <li>
+                    obtain <code>CameraCaptureSession</code> object: (1)
+                    <ul>
+                        <li>
+                            <span>Further we need to create <code>ImageReader</code> object (2)</span>
+                            <ul>
+                                <li>Get size of Image produced by CameraDevice. It may be largest size.(3)</li>
+                                <li>Create <code>ImageReader.OnImageAvailableListener</code> object and connect to <code>ImageReader</code> object (4)</li>
+                            </ul>
+                        </li>
+                        <li>Create <code>CameraCaptureSession.StateCallback</code> object (5)</li>
+                    </ul>
+                </li>
+                <li><code>CaptureRequest</code> object (5)</li>
+                <li>and <code>CameraCaptureSession.CaptureCallback</code>(6)</li>
+            </ul>
+            <p>In this example we will capture image and save it to jpeg file.</p>
+
+            <h3>(4) Creating OnImageAvailableListener </h3>
+            <p>As title said we create listener, which is called, when Image from camera is available. That's all. We need to save it to file. More detailed listener gets <code>ImageReader</code>, which can get latest image. Then this image can be easly saved into file. After that, all elements should be closed: Reader, Image and File.</p>
+            <pre>
+                // create ImageAvailableListener
+                ImageReader.OnImageAvailableListener imageAvailableListener = new ImageReader.OnImageAvailableListener() {
+                    // only one methon to implement
+                    @Override
+                    public void onImageAvailable(final ImageReader reader) {
+
+                        // read image from ImageReader
+                        final Image image = reader.acquireLatestImage();
+
+                        // save file in background thread, to don't block UI/Camera
+                        backgroundHandler.post(new Runnable() {
+                            // in anonymous class impelemtn run method
+                            @Override
+                            public void run() {
+                                //get content
+                                ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+                                byte[] bytes = new byte[buffer.remaining()];
+                                buffer.get(bytes);
+                                FileOutputStream output = null;
+                                try {
+                                    File file = getFile(image);
+                                    output = new FileOutputStream(file);
+                                    // save content to file
+                                    output.write(bytes);
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                } finally {
+                                    // close image
+                                    image.close();
+                                    if (null != output) {
+                                        try {
+                                            output.close();
+                                        } catch (IOException e) {
+                                            e.printStackTrace();
+                                        }
+                                    }
+                                }
+                                // close reader
+                                reader.close();
+                            }
+
+                            // get file
+                            private File getFile(Image image) {
+                                long timestamp = image.getTimestamp();
+                                File externalFileDir = Environment.getExternalStorageDirectory();
+                                String folderPath = String.format("%s/%s/%s/", externalFileDir, Environment.DIRECTORY_DCIM, "MyApplication");
+                                File folder = new File(folderPath);
+                                if (!folder.exists()) {
+                                    boolean success = folder.mkdirs();
+                                }
+                                File file = new File(String.format("%s/%s.%s", folderPath, timestamp, "jpg"));
+                                Log.d("ExampleInstrumentedTest", "OnImageAvailableListener:save: " + file.getAbsolutePath());
+                                return file;
+                            }
+                        });
+                    }
+                };
+            </pre>
+            <p>Anonyous runner class can be refactored to inner class. You can name it for example: <code>TestImageSaver</code></p>
+
+            <h3>(3) get largest jpeg Image Size</h3>
+            <pre>
+                CameraCharacteristics cameraCharacteristics = manager.getCameraCharacteristics(cameraId);
+                StreamConfigurationMap configurationMap = cameraCharacteristics.get(
+                        CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                Size[] jpegOutputSized = configurationMap.getOutputSizes(ImageFormat.JPEG);
+                Size largestJpegSize = Collections.max(Arrays.asList(jpegOutputSized), new Comparator<Size>() {
+                    @Override
+                    public int compare(Size o1, Size o2) {
+                        return Long.signum((long) o1.getWidth() * o1.getHeight() -
+                                (long) o2.getWidth() * o2.getHeight());
+                    }
+                });
+            </pre>
+
+
+            <h3>(2) Create <code>ImageReader</code></h3>
+            <pre>
+                ImageReader imageReader = ImageReader.newInstance(largestJpeg.getWidth(), largestJpeg.getHeight(), ImageFormat.JPEG, 5);
+                imageReader.setOnImageAvailableListener(imageAvailableListener, backgroundHandler);
+            </pre>
+        </div>
+    </body>
+</html>
