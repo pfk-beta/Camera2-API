@@ -123,8 +123,8 @@
                         <li>Create <code>CameraCaptureSession.StateCallback</code> object (5)</li>
                     </ul>
                 </li>
-                <li><code>CaptureRequest</code> object (5)</li>
-                <li>and <code>CameraCaptureSession.CaptureCallback</code>(6)</li>
+                <li><code>CaptureRequest</code> object (6)</li>
+                <li>and <code>CameraCaptureSession.CaptureCallback</code>(7)</li>
             </ul>
             <p>In this example we will capture image and save it to jpeg file.</p>
 
@@ -206,12 +206,21 @@
                 });
             </pre>
 
-
             <h3>(2) Create <code>ImageReader</code></h3>
             <pre>
                 ImageReader imageReader = ImageReader.newInstance(largestJpeg.getWidth(), largestJpeg.getHeight(), ImageFormat.JPEG, 5);
                 imageReader.setOnImageAvailableListener(imageAvailableListener, backgroundHandler);
             </pre>
+
+            <h3>(5) Create <code>CameraCaptureSession.StateCallback</code> object</h3>
+
+            <h3>(6) Create <code>CaptureRequest</code> object</h3>
+
+            <h3>(7) Create <code>CameraCaptureSession.CaptureCallback</code> object</h3>
+
+            <h3>capture picture</h3>
+
+            <h2>TL;DR</h2>
         </div>
     </body>
 </html>
