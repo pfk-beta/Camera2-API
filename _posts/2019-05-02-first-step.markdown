@@ -120,6 +120,8 @@ At the end run test class
 
 
 ## Troubleshooting
+* Add `<uses-permission android:name="android.permission.CAMERA" />` into `AndroidManifest.xml`
+
 * If you got error `Lacking privileges to access camera service`, google for it! and add:
 ```java
 @Rule
@@ -127,7 +129,101 @@ public GrantPermissionRule permissionRule = GrantPermissionRule.grant(Manifest.p
 ```
 
 * If you got error `No instrumentation registered! Must run under a registering instrumentation`, 
-google for it! and change android.support to `androidx` packages. According to documentation, not to auto created file.
+google for it! and change `android.support` to `androidx` packages. According to documentation. 
+At the end, if no method helps, remove `Run configuration` from Android Studio, and create new one for invoking tests.
+
+* Test can be run on VirtualMachine as well
+
+
+# TL;DR
+```java
+package com.example.myapplication;
+
+
+import android.Manifest;
+import android.content.Context;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CameraManager;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.util.Log;
+
+import androidx.annotation.NonNull;
+import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.SmallTest;
+import androidx.test.rule.GrantPermissionRule;
+import androidx.test.runner.AndroidJUnit4;
+
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
+@RunWith(AndroidJUnit4.class)
+@SmallTest
+public class ExampleInstrumentedTest {
+
+
+    @Rule
+    public GrantPermissionRule permissionRule = GrantPermissionRule.grant(Manifest.permission.CAMERA);
+
+    // create variable for holding device
+    private CameraDevice cameraDevice;
+
+    // create state object, to pass to open method. Implements required methods
+    private CameraDevice.StateCallback mStateCallback = new CameraDevice.StateCallback() {
+        @Override
+        public void onOpened(@NonNull CameraDevice camera) {
+            // this method is most important for us. Assign opened device to our variable defined above
+            cameraDevice = camera;
+            Log.d("ExampleInstrumentedTest", "CameraDevice.StateCallback::onOpened");
+        }
+
+        @Override
+        public void onDisconnected(@NonNull CameraDevice camera) {
+            camera.close();
+        }
+
+        @Override
+        public void onError(@NonNull CameraDevice camera, int error) {
+            camera.close();
+        }
+    };
+
+
+    @Test
+    public void test1() throws CameraAccessException {
+        // get context (remember to use getTargetContext())
+        Context context = InstrumentationRegistry.getTargetContext();
+        // get camera manager
+        CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+        // iterate over all device's cameras
+        String cameraId = null;
+        for (String camId : manager.getCameraIdList()) {
+            // and choose apropriete one, based on camera characteristics
+            CameraCharacteristics characteristics = manager.getCameraCharacteristics(camId);
+
+            Integer LENS_FACING = characteristics.get(CameraCharacteristics.LENS_FACING);
+            if (LENS_FACING != null && LENS_FACING == CameraCharacteristics.LENS_FACING_BACK) {
+                cameraId = camId;
+                break;
+            }
+        }
+
+        HandlerThread mBackgroundThread = new HandlerThread("CameraThread");
+        mBackgroundThread.start();
+        Handler backgroundHandler = new Handler(mBackgroundThread.getLooper());
+
+        if (cameraId != null) {
+            manager.openCamera(cameraId, mStateCallback, backgroundHandler);
+        }
+    }
+}
+```
+
+In next post we will create CaptureSession and capture first photo.
+
 
 [android-create-project]: https://developer.android.com/studio/projects/create-project/
 [android-instrumented-tests]: https://developer.android.com/training/testing/unit-testing/instrumented-unit-tests
