@@ -1,8 +1,5 @@
 ---
-layout: post
 title:  "First steps"
-date:   2019-05-02 23:58:49 +0200
-categories: camera2api
 ---
 
 # Before coding
