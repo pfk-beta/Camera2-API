@@ -306,6 +306,234 @@
             </pre>
 
             <h2>TL;DR</h2>
+            <pre>
+                package com.example.myapplication;
+
+
+                import android.Manifest;
+                import android.content.Context;
+                import android.graphics.ImageFormat;
+                import android.hardware.camera2.CameraAccessException;
+                import android.hardware.camera2.CameraCaptureSession;
+                import android.hardware.camera2.CameraCharacteristics;
+                import android.hardware.camera2.CameraDevice;
+                import android.hardware.camera2.CameraManager;
+                import android.hardware.camera2.CaptureRequest;
+                import android.hardware.camera2.TotalCaptureResult;
+                import android.hardware.camera2.params.StreamConfigurationMap;
+                import android.media.Image;
+                import android.media.ImageReader;
+                import android.os.Environment;
+                import android.os.Handler;
+                import android.os.HandlerThread;
+                import android.util.Log;
+                import android.util.Size;
+
+                import androidx.annotation.NonNull;
+                import androidx.test.InstrumentationRegistry;
+                import androidx.test.filters.SmallTest;
+                import androidx.test.rule.GrantPermissionRule;
+                import androidx.test.runner.AndroidJUnit4;
+
+                import junit.framework.Assert;
+
+                import org.junit.Rule;
+                import org.junit.Test;
+                import org.junit.runner.RunWith;
+
+                import java.io.File;
+                import java.io.FileOutputStream;
+                import java.io.IOException;
+                import java.nio.ByteBuffer;
+                import java.util.Arrays;
+                import java.util.Collections;
+                import java.util.Comparator;
+
+                @RunWith(AndroidJUnit4.class)
+                @SmallTest
+                public class ExampleInstrumentedTest {
+
+
+                    @Rule
+                    public GrantPermissionRule permissionRule = GrantPermissionRule.grant(Manifest.permission.CAMERA);
+
+                    // create variable for holding device
+                    private CameraDevice cameraDevice;
+
+                    // create state object, to pass to open method. Implements required methods
+                    private CameraDevice.StateCallback mStateCallback = new CameraDevice.StateCallback() {
+                        @Override
+                        public void onOpened(@NonNull CameraDevice camera) {
+                            // this method is most important for us. Assign opened device to our variable defined above
+                            cameraDevice = camera;
+                            Log.d("ExampleInstrumentedTest", "CameraDevice.StateCallback::onOpened");
+                        }
+
+                        @Override
+                        public void onDisconnected(@NonNull CameraDevice camera) {
+                            camera.close();
+                        }
+
+                        @Override
+                        public void onError(@NonNull CameraDevice camera, int error) {
+                            camera.close();
+                        }
+                    };
+
+
+                    private CameraCaptureSession cameraCaptureSession;
+                    private CameraCaptureSession.StateCallback sessionStateCallback = new CameraCaptureSession.StateCallback() {
+                        @Override
+                        public void onConfigured(@NonNull CameraCaptureSession session) {
+                            cameraCaptureSession = session;
+                            Log.d("ExampleInstrumentedTest", "CameraCaptureSession.StateCallback::onConfigured");
+                        }
+
+                        @Override
+                        public void onConfigureFailed(@android.support.annotation.NonNull CameraCaptureSession session) {
+
+                        }
+                    };
+
+
+                    private CameraCaptureSession.CaptureCallback captureCallback = new CameraCaptureSession.CaptureCallback() {
+                        @Override
+                        public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request,
+                                                     long timestamp, long frameNumber) {
+                            Log.d("ExampleInstrumentedTest", "CaptureCallback::onCaptureStarted");
+                        }
+
+                        @Override
+                        public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request,
+                                                       @NonNull TotalCaptureResult result) {
+                            Log.d("ExampleInstrumentedTest", "CaptureCallback::onCaptureCompleted");
+                        }
+                    };
+
+
+                    @Test
+                    public void test1() throws CameraAccessException {
+                        // get context (remember to use getTargetContext())
+                        final Context context = InstrumentationRegistry.getTargetContext();
+                        // get camera manager
+                        CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+                        // iterate over all device's cameras
+                        String cameraId = null;
+                        for (String camId : manager.getCameraIdList()) {
+                            // and choose apropriete one, based on camera characteristics
+                            CameraCharacteristics characteristics = manager.getCameraCharacteristics(camId);
+
+                            Integer LENS_FACING = characteristics.get(CameraCharacteristics.LENS_FACING);
+                            if (LENS_FACING != null && LENS_FACING == CameraCharacteristics.LENS_FACING_BACK) {
+                                cameraId = camId;
+                                break;
+                            }
+                        }
+
+                        CameraCharacteristics cameraCharacteristics = manager.getCameraCharacteristics(cameraId);
+                        StreamConfigurationMap configurationMap = cameraCharacteristics.get(
+                                CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                        Size[] jpegOutputSized = configurationMap.getOutputSizes(ImageFormat.JPEG);
+                        Size largestJpegSize = Collections.max(Arrays.asList(jpegOutputSized), new Comparator<Size>() {
+                            @Override
+                            public int compare(Size o1, Size o2) {
+                                return Long.signum((long) o1.getWidth() * o1.getHeight() -
+                                        (long) o2.getWidth() * o2.getHeight());
+                            }
+                        });
+
+                        HandlerThread mBackgroundThread = new HandlerThread("CameraThread");
+                        mBackgroundThread.start();
+                        final Handler backgroundHandler = new Handler(mBackgroundThread.getLooper());
+
+                        if (cameraId != null) {
+                            manager.openCamera(cameraId, mStateCallback, backgroundHandler);
+                        }
+
+                        ImageReader.OnImageAvailableListener imageAvailableListener = new ImageReader.OnImageAvailableListener() {
+                            @Override
+                            public void onImageAvailable(final ImageReader reader) {
+                                final Image image = reader.acquireLatestImage();
+                                backgroundHandler.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+                                        byte[] bytes = new byte[buffer.remaining()];
+                                        buffer.get(bytes);
+                                        FileOutputStream output = null;
+                                        try {
+                                            File file = getFile(image);
+                                            output = new FileOutputStream(file);
+                                            output.write(bytes);
+                                        } catch (IOException e) {
+                                            e.printStackTrace();
+                                        } finally {
+                                            image.close();
+                                            if (null != output) {
+                                                try {
+                                                    output.close();
+                                                } catch (IOException e) {
+                                                    e.printStackTrace();
+                                                }
+                                            }
+                                        }
+                                        reader.close();
+                                    }
+
+                                    private File getFile(Image image) {
+                                        long timestamp = image.getTimestamp();
+                                        File externalFileDir = Environment.getExternalStorageDirectory();
+                                        String folderPath = String.format("%s/%s/%s/", externalFileDir, Environment.DIRECTORY_DCIM, "MyApplication");
+                                        File folder = new File(folderPath);
+                                        if (!folder.exists()) {
+                                            boolean success = folder.mkdirs();
+                                        }
+                                        File file = new File(String.format("%s/%s.%s", folderPath, timestamp, "jpg"));
+                                        Log.d("ExampleInstrumentedTest", "OnImageAvailableListener:save: " + file.getAbsolutePath());
+                                        return file;
+                                    }
+                                });
+                            }
+                        };
+
+                        final ImageReader imageReader = ImageReader.newInstance(largestJpegSize.getWidth(), largestJpegSize.getHeight(), ImageFormat.JPEG, 5);
+                        imageReader.setOnImageAvailableListener(imageAvailableListener, backgroundHandler);
+
+
+                        cameraDevice.createCaptureSession(Collections.singletonList(imageReader.getSurface()), sessionStateCallback, backgroundHandler);
+
+                        Log.d("ExampleInstrumentedTest", "createCaptureRequest");
+                        CaptureRequest.Builder requestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+
+                        Log.d("ExampleInstrumentedTest", "addTarget");
+                        requestBuilder.addTarget(imageReader.getSurface());
+
+                        Log.d("ExampleInstrumentedTest", "requestBuilder.build");
+                        final CaptureRequest request = requestBuilder.build();
+
+                        backgroundHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    Log.d("ExampleInstrumentedTest", "cameraCaptureSession.capture");
+                                    cameraCaptureSession.capture(request, captureCallback, backgroundHandler);
+                                } catch (CameraAccessException e) {
+                                    Assert.fail("CameraAccessException during creating request!");
+                                    e.printStackTrace();
+                                }
+                            }
+                        });
+
+                        try {
+                            // explicit sleep, to finish capturing image
+                            Thread.sleep(1000);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+
+                    }
+                }
+            </pre>
         </div>
     </body>
 </html>
