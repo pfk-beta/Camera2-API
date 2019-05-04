@@ -132,7 +132,7 @@
                                 <li>Create <code>ImageReader.OnImageAvailableListener</code> object and connect to <code>ImageReader</code> object (4)</li>
                             </ul>
                         </li>
-                        <li>Create <code>CameraCaptureSession.StateCallback</code> object (5)</li>
+                        <li>Create <code>CameraCaptureSession.StateCallback</code> object and get session object (5)</li>
                     </ul>
                 </li>
                 <li><code>CaptureRequest</code> object (6)</li>
@@ -224,13 +224,86 @@
                 imageReader.setOnImageAvailableListener(imageAvailableListener, backgroundHandler);
             </pre>
 
-            <h3>(5) Create <code>CameraCaptureSession.StateCallback</code> object</h3>
+            <h3>(5) Create <code>CameraCaptureSession.StateCallback</code> object and get session object</h3>
+            <p>session object should be a test class' field and session state callback as well. Inside state callback, we assign configured session, to field.</p> 
+            <pre>
+                // this code is part of class definition
+
+                // session object
+                private CameraCaptureSession cameraCaptureSession;
+
+                // session state callback
+                private CameraCaptureSession.StateCallback sessionStateCallback = new CameraCaptureSession.StateCallback() {
+                    @Override
+                    public void onConfigured(@NonNull CameraCaptureSession session) {
+                        cameraCaptureSession = session;
+                        Log.d(TAG, "CameraCaptureSession.StateCallback::onConfigured");
+                    }
+
+                    @Override
+                    public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+
+                    }
+                };
+            </pre>
+            <pre>
+                // this code is part of test method
+                cameraDevice.createCaptureSession(Collections.singletonList(imageReader.getSurface()), sessionStateCallback, backgroundHandler);
+            </pre>
 
             <h3>(6) Create <code>CaptureRequest</code> object</h3>
+            <pre>
+                // create RequestBuilder
+                CaptureRequest.Builder requestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+
+                // set surface in builder
+                requestBuilder.addTarget(imageReader.getSurface());
+
+                // build a single request - it will be passed to capture method
+                CaptureRequest request = requestBuilder.build();
+            </pre>
 
             <h3>(7) Create <code>CameraCaptureSession.CaptureCallback</code> object</h3>
+            <pre>
+                // may be part of class definition (class field)
+                CameraCaptureSession.CaptureCallback captureCallback = new CameraCaptureSession.CaptureCallback() {
+                    @Override
+                    public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request,
+                                                 long timestamp, long frameNumber) {
+                        Log.d("ExampleInstrumentedTest", "CaptureCallback::onCaptureStarted");
+                    }
+
+                    @Override
+                    public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request,
+                                                   @NonNull TotalCaptureResult result) {
+                        Log.d("ExampleInstrumentedTest", "CaptureCallback::onCaptureCompleted");
+                    }
+                };
+            </pre>
 
             <h3>capture picture</h3>
+            <p>It may be not obvious, but when camera code is invoked with any handler object. Then this method is not run explicite in that moment. Part of this method is posted to a handler, and is invoked some kind "in background". In other words we should know how multithreading is working in Java. To solve this problem, just run capture method in the same thread handler, as other camera methods was invoked. To do this, google for: "java handler post" or look:</p>
+            <pre>
+                backgroundHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Log.d("ExampleInstrumentedTest", "cameraCaptureSession.capture");
+                            cameraCaptureSession.capture(request, captureCallback, backgroundHandler);
+                        } catch (CameraAccessException e) {
+                            Assert.fail("CameraAccessException during creating request!");
+                            e.printStackTrace();
+                        }
+                    }
+                });
+                // at the end, add waiting, to finish all thread tasks
+                try {
+                    // explicit sleep, to finish capturing image
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            </pre>
 
             <h2>TL;DR</h2>
         </div>
